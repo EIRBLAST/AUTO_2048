@@ -30,13 +30,10 @@ pygame.key.set_repeat()
 width = 1300
 height = 700
 gameBoard = 600
-window = pygame.display.set_mode((width, height)) # Width by Height
+
 score = 0
 
 # Window Initialization
-pygame.display.set_caption('2048')
-icon = pygame.image.load('favicon.ico')
-pygame.display.set_icon(icon)
 
 
 # Suite of operation on m to make it so that every collapse is like collapsing upward
@@ -60,12 +57,21 @@ def undoMatrixOperation(m:numpy.matrix,vector:List[int],move):
 
 # Handle all game operations
 class Game:
-    def __init__(self, size=4):
+    def __init__(self, size=4,draw=True):
         self.board :numpy.matrix = numpy.matrix(numpy.zeros((size,size)))
         self.game_on = True
         self.size = size
         self.score = 0
+        self.draws = draw
         self.previous_board = copy.deepcopy(self.board)
+        if draw:
+            global window
+            global icon
+            window = pygame.display.set_mode((width, height)) # Width by Height
+            pygame.display.set_caption('2048')
+            icon = pygame.image.load('favicon.ico')
+            pygame.display.set_icon(icon)
+
     def is_on(self)->bool:
         return self.game_on
     def end(self)->None:
@@ -116,7 +122,8 @@ class Game:
     def update(self, x_move, y_move):
         self.previous_board = copy.deepcopy(self.board)
         # We draw what needs to be drawn to the screen
-        self.draw()
+        if self.draws:
+            self.draw()
         # We do nothing if we have no moovement input
         if [x_move, y_move] == [0, 0]:
             return
@@ -193,33 +200,24 @@ class Game:
         position = random.choices(positions)[0]
         self.board[position[0], position[1]] = value
         return True
-
-
-game = Game(size=4)
-game.add_new_tile()
-game.add_new_tile()
-while game.is_on():
-    window.fill((255, 225, 255))
-    vector = [0, 0]
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            game.end()
-        if event.type == pygame.KEYUP:
-            if event.key == pygame.K_UP:
-                vector = [0, -1]
-            elif event.key == pygame.K_DOWN:
-                vector = [0, 1]
-            elif event.key == pygame.K_RIGHT:
-                vector = [1, 0]
-            elif event.key == pygame.K_LEFT:
-                vector = [-1, 0]
-            elif event.key == pygame.K_ESCAPE:
-                game.end()
-            elif event.key == pygame.K_r:
-                game.board = numpy.matrix(numpy.zeros((game.size,game.size)))
-                score = 0
-                game.add_new_tile()
-                game.add_new_tile()
-    
-    game.update(vector[0], vector[1])
-    pygame.display.update()
+    def simulate_next_moove(self, vector, board=None):
+        if board is None:
+            board = self.previous_board
+        # We first check if we can move
+        if not self.can_move(vector):
+            return self.board
+        # We then simulate the next moove
+        new_board = self.merge(vector, board=board)
+        return new_board
+    def check_game_state(self):
+        positions = []
+        # We add free spaces into a list
+        for x in range(self.size):
+            for y in range(self.size):
+                if self.board[x, y] == 0:
+                    positions.append([x, y])
+                    return True
+        if positions == []:
+            self.end()
+            return False
+        
