@@ -1,88 +1,120 @@
 import numpy as np
+import math
 
-def is_non_decreasing(lst):
-    return all(x <= y for x, y in zip(lst, lst[1:]))
+import math
 
-def monotonicity_value(grid):
-    binary_string = ''
-
-    # Check rows for monotonicity
-    for row in grid:
-        if is_non_decreasing(row):
-            binary_string += '1'
-        else:
-            binary_string += '0'
-
-    # Check columns for monotonicity
-    for col in range(len(grid[0])):
-        column = [grid[row][col] for row in range(len(grid))]
-        if is_non_decreasing(column):
-            binary_string += '1'
-        else:
-            binary_string += '0'
-
-    # Convert binary string to integer
-    monotonicity_id = int(binary_string, 2)
-    return monotonicity_id
-
-def find_highest_tile(grid):
-    max_value = None
-    max_index = (None, None)
-
-    for i, row in enumerate(grid):
-        for j, value in enumerate(row):
-            if max_value is None or value > max_value:
-                max_value = value
-                max_index = (i, j)
-
-    return max_index, int(max_value)
-
-def calculate_fitness(game_stat):
-    fitness = 0
-    # -MAX_TILE-#  / # -SMOOTHNESS-#
-    _,max_tile = find_highest_tile(np.array(game_stat.board))
-    fitness += np.log2(max_tile + 1) / calculate_smoothness(
-        game_stat.board
-    )
-    # - SCORE - #
-    fitness += np.log2(game_stat.score + 1)
-    return fitness
-
+import math
 
 def calculate_smoothness(board):
     """
-    Calculate the smoothness of a 2048 game board.
+    Calculate smoothness using logarithmic scaling and normalization.
+    Higher is better.
+    bounds : [0 : -infinity]
+    """
+    smoothness = 0
+    for i in range(4):
+        for j in range(4):
+            if j < 3:  # Horizontal neighbor
+                if board[i][j] > 0 and board[i][j + 1] > 0:
+                    log_diff = abs(math.log2(board[i][j]) - math.log2(board[i][j + 1]))
+                    max_log = max(math.log2(board[i][j]), math.log2(board[i][j + 1]))
+                    smoothness -= log_diff / max_log
+            if i < 3:  # Vertical neighbor
+                if board[i][j] > 0 and board[i + 1][j] > 0:
+                    log_diff = abs(math.log2(board[i][j]) - math.log2(board[i + 1][j]))
+                    max_log = max(math.log2(board[i][j]), math.log2(board[i + 1][j]))
+                    smoothness -= log_diff / max_log
+    return smoothness
 
-    :param board: A list of 16 integers representing the game board.
-    :return: A smoothness score, where a lower score indicates a smoother board.
+
+
+def calculate_monotonicity(board):
+    monotonicity = 0
+    
+    # Row-wise monotonicity
+    for i in range(4):
+        row = board[i]
+        for j in range(3):
+            if row[j] > row[j + 1]:  # Decreasing
+                monotonicity += row[j + 1] - row[j]
+            elif row[j] < row[j + 1]:  # Increasing
+                monotonicity += row[j] - row[j + 1]
+    
+    # Column-wise monotonicity
+    for j in range(4):
+        for i in range(3):
+            if board[i][j] > board[i + 1][j]:  # Decreasing
+                monotonicity += board[i + 1][j] - board[i][j]
+            elif board[i][j] < board[i + 1][j]:  # Increasing
+                monotonicity += board[i][j] - board[i + 1][j]
+    
+    return monotonicity
+
+def calculate_directional_monotonicity(board):
+    scores = [0, 0, 0, 0]  # Row-increasing, Row-decreasing, Col-increasing, Col-decreasing
+    
+    # Row-wise monotonicity
+    for i in range(4):
+        for j in range(3):
+            if board[i][j] <= board[i][j + 1]:  # Row-increasing
+                scores[0] += board[i][j + 1] - board[i][j]
+            if board[i][j] >= board[i][j + 1]:  # Row-decreasing
+                scores[1] += board[i][j] - board[i][j + 1]
+    
+    # Column-wise monotonicity
+    for j in range(4):
+        for i in range(3):
+            if board[i][j] <= board[i + 1][j]:  # Col-increasing
+                scores[2] += board[i + 1][j] - board[i][j]
+            if board[i][j] >= board[i + 1][j]:  # Col-decreasing
+                scores[3] += board[i][j] - board[i + 1][j]
+    
+    return scores
+
+def calculate_total_monotonicity(board):
+    scores = calculate_directional_monotonicity(board)
+    total_score = sum(scores)
+    return total_score
+
+def evaluate_board(board):
+    """
+    Evaluate a 2048 board based on its features.
     """
     board = board.tolist()
 
-    smoothness = 0
-    size = 4  # Assuming a 4x4 board
+    # Calculate individual features
+    smoothness = calculate_smoothness(board)
+    monotonicity = calculate_total_monotonicity(board)
+    empty_tiles = sum(1 for row in board for cell in row if cell == 0)
+    max_tile = max(max(row) for row in board)
+    max_tile = 0 if max_tile == 0 else math.log2(max_tile)
+    # Weight each feature (adjust weights based on testing)
+    smoothness_weight = 1.0
+    monotonicity_weight = 1.5
+    empty_tiles_weight = 2.0
+    max_tile_weight = 1.0
 
-    # Calculate differences between horizontally adjacent tiles
-    for row in board:
-        for i in range(size - 1):
-            if row[i] != 0 and row[i + 1] != 0:  # Only compare non-empty tiles
-                smoothness += abs(row[i] - row[i + 1])
+    # Combine features into a single score
+    score = (
+        smoothness_weight * smoothness +
+        monotonicity_weight * monotonicity +
+        empty_tiles_weight * empty_tiles +
+        max_tile_weight * max_tile
+    )
+    return score
 
-    # Calculate differences between vertically adjacent tiles
-    for i in range(size):
-        for j in range(size - 1):
-            if (
-                board[j][i] != 0 and board[j + 1][i] != 0
-            ):  # Only compare non-empty tiles
-                smoothness += abs(board[j][i] - board[j + 1][i])
-    if smoothness < 0.1:
-        return 1
-    return smoothness
 if __name__ == "__main__":
     # Example grid
-    grid = [[2, 4, 8, 16],
-            [4, 8, 16, 32],
-            [8, 16, 32, 64],
-            [16, 32, 64, 128]]
-
+    gridSmooth = np.array([[2, 4, 8, 16],
+            [32, 64, 128, 256],
+            [512, 1024, 2048, 4096],
+            [8192, 16384, 32768, 65536]])
+    gridNoSmooth = np.array([[2,4,4,2],
+                    [4,8,16,32],
+                    [2048,4,2,64],
+                    [2,4,4,2]])
+    gridZero = np.zeros((4,4),int)
     # Get the monotonicity value
-    print(monotonicity_value(grid))
+    print(calculate_total_monotonicity(gridZero))
+    print(calculate_total_monotonicity(gridNoSmooth))
+    print(calculate_total_monotonicity(gridSmooth))

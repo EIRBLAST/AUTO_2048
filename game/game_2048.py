@@ -69,8 +69,8 @@ class Game:
             global icon
             window = pygame.display.set_mode((width, height)) # Width by Height
             pygame.display.set_caption('2048')
-            icon = pygame.image.load('favicon.ico')
-            pygame.display.set_icon(icon)
+            #icon = pygame.image.load('favicon.ico')
+            #pygame.display.set_icon(icon)
 
     def is_on(self)->bool:
         return self.game_on
